@@ -3,7 +3,7 @@ __author__ = 'jwoodard'
 # TODO -- Possibly display the last 5 numbers dialed and make them redialed with A-E options
 # TODO -- Encrypt FAC and Password
 # TODO -- Find phone IP Automatically
-
+# TODO -- Create Folder for ini file
 # TODO -- Rerun setup option??
 # TODO -- Check for any unauthorized response
 # TODO -- DONE -- Operating system check for ini_location
@@ -63,7 +63,8 @@ def configcheck(): # If config is not set, ask setup questions and create file
             print "Error: Could not find config file... Running setup.\n\n"
             setupconfig()
 
-    parser = ConfigParser.ConfigParser().readfp(ini_file)
+    parser = ConfigParser.ConfigParser()
+    parser.readfp(ini_file)
     return parser
 
 
@@ -116,11 +117,7 @@ def formatdial(input_numbers): ##8704036566
 
 
 def dialNumbers(number):
-    xml = '''
-            XML=<CiscoIPPhoneExecute>
-                    <ExecuteItem Priority="0" URL="Dial:''' + number + '''"/>
-                  </CiscoIPPhoneExecute>
-          '''
+    xml = 'XML=<CiscoIPPhoneExecute><ExecuteItem Priority="0" URL="Dial:' + number + '"/></CiscoIPPhoneExecute>'
 
     headers = {
         'Host': parser.get("Information", "ip"),
@@ -145,4 +142,4 @@ dial = False
 while dial is False:
     dial = formatdial(prompt())
     print "Dialing "+dial+"....."
-    # dialNumbers(dial)
+    dialNumbers(dial)
