@@ -1,13 +1,12 @@
 __author__ = 'jwoodard'
 
-# TODO -- Possibly display the last 5 numbers dialed and make them redialed with A-E options
-# TODO -- Encrypt FAC and Password
+
 # TODO -- Find phone IP Automatically
-# TODO -- Create Folder for ini file
-# TODO -- Rerun setup option??
+# TODO -- DONE -- Create Folder for ini file
 # TODO -- Check for any unauthorized response
 # TODO -- DONE -- Operating system check for ini_location
-# TODO -- DONE -- First run prompt for creds and FAC, store creds to an encrypted file
+# TODO -- DONE -- First run prompt for creds and FAC
+# TODO -- DONE -- Store creds to an encrypted file
 # TODO -- DONE -- Take Input "ld918704036566" ld and change to 918704036566,FAC#
 # todo -- DONE -- if input longer than 4 digits, append 9
 # todo -- DONE -- if longer than 6 digts append 91
@@ -16,60 +15,94 @@ __author__ = 'jwoodard'
 
 import requests
 import getpass
-import platform
+import platform  # may not need this since we have to have os
+import os
+import re
 from requests.auth import HTTPBasicAuth
 import ConfigParser
+import base64
+
+
+def encode(secretkey, clear):
+    enc = []
+    for i in range(len(clear)):
+        key_c = secretkey[i % len(secretkey)]
+        enc_c = chr((ord(clear[i]) + ord(key_c)) % 256)
+        enc.append(enc_c)
+    return base64.urlsafe_b64encode("".join(enc))
+
+
+def decode(secretkey, enc):
+    dec = []
+    enc = base64.urlsafe_b64decode(enc)
+    for i in range(len(enc)):
+        key_c = secretkey[i % len(secretkey)]
+        dec_c = chr((256 + ord(enc[i]) - ord(key_c)) % 256)
+        dec.append(dec_c)
+    return "".join(dec)
 
 
 def os_check():
     locations = {
-        "Windows": "C:\\Users\\"+getpass.getuser()+"\\CiscoPhoneQuickDial\\QuickDialConfig.ini",
+        "Windows": "C:\\Users\\" + getpass.getuser() + "\\CiscoPhoneQuickDial\\",
         "Linux": "\\home\\USER\\.config\\QuickDialConfig\\QuickDialConfig.ini",
         "Darwin": "Some OSX Location"
-        }
+    }
     ini = locations[platform.system()]
     return ini
 
 
 def setupconfig():
+    print "---Quick Dial Setup---"
     setup = ConfigParser.SafeConfigParser()
     setup.add_section("Information")
     setup.set('Information', 'user', raw_input("Please enter your username: "))
-    setup.set('Information', 'password', raw_input("Please enter your password: "))
-    setup.set('Information', 'fac', raw_input("Please enter your FAC Code: "))
+    setup.set('Information', 'password', encode(key, getpass.getpass("Please enter your password: ")))
+    setup.set('Information', 'fac', encode(key, raw_input("Please enter your FAC Code: ")))
     setup.set('Information', 'phone', raw_input("Enter your phone device name: "))
     setup.set('Information', 'ip', raw_input("Enter your phone IP address: "))
+    print "\n"
 
-    print"Attempting to write config file...."
-    try:
-        with open(ini_location, 'w') as configfile:
-            setup.write(configfile)
-            print "Done"
-            return True
-    except IOError:
-        print "ERROR: Unable to create file. Check write permissions to location"
-        print "Expected Location: " + ini_location
-        raise SystemExit()
+    count = 0
+    while count != 2:
+        if os.path.exists(ini_location):
+            print "OK"
+            count = 2
+        else:
+            print "Config folder not found, attempting to create...."
+            os.makedirs(ini_location)
+            count = 1
+
+        print"Folder Found! Attempting to write config file...."
+        try:
+            with open(ini_location + ini_file, 'w') as configfile:
+                setup.write(configfile)
+                print "Success!!"
+                return True
+        except IOError:
+            print "ERROR: Unable to create file. Check write permissions to location"
+            print "Expected Location: " + ini_location + ini_file
+            raise SystemExit()
 
 
-def configcheck(): # If config is not set, ask setup questions and create file
+def configcheck():  # If config is not set, ask setup questions and create file
     test = False
 
-    while not test: # fails if no file, creates file and sets while test to true allowing
+    while not test:  # fails if no file, creates file and sets while test to true allowing
         try:
-            ini_file = open(ini_location)
+            full_file = open(ini_location + ini_file)
             test = True
         except IOError:
-            print "Error: Could not find config file... Running setup.\n\n"
+            print "Could not find config file... Attempting initial setup.\n"
             setupconfig()
 
     parser = ConfigParser.ConfigParser()
-    parser.readfp(ini_file)
+    parser.readfp(full_file)
     return parser
 
 
 def addFAC(x):
-    x = x + ','+parser.get("Information", "fac")+'#'
+    x = x + ',' + decode(key, parser.get("Information", "fac")) + '#'
     return x
 
 
@@ -86,7 +119,20 @@ def prompt():
     return NumberToDial
 
 
-def formatdial(input_numbers): ##8704036566
+def validcheck(input):
+    pattern = '^[0-9f]*$'
+    match = re.search(pattern, input)
+    if match:
+        answer = True
+    else:
+        answer = False
+    return answer
+
+def formatdial(input_numbers):
+
+    if not validcheck(input_numbers):
+        print "INPUT ERROR: Only number string of 4,7 or 10 digits and 'f' accepted. "
+        return False
 
     fac = False
 
@@ -124,22 +170,28 @@ def dialNumbers(number):
         'Connection': 'close',
         'Content-Type': 'application/x-www-form-urlencoded'
     }
-    print 'Attemping to Call: ' + number+'....'
+
+    print 'Attempting to call: ' + number + '....'
     try:
-        requests.post('http://'+parser.get("Information", "ip")+'/CGI/Execute',
-                          data=xml,
-                          headers=headers,
-                          auth=HTTPBasicAuth(parser.get("Information", "User"), parser.get("Information", "password")))
+        requests.post('http://' + parser.get("Information", "ip") + '/CGI/Execute',
+                      data=xml,
+                      headers=headers,
+                      auth=HTTPBasicAuth(parser.get("Information", "User"),
+                                         decode(key, parser.get("Information", "password"))))
 
     except requests.ConnectionError, e:
         print e
 
 
-ini_location = os_check()
+print "****Cisco Quick Dial****"
+ini_file = "QuickDialConfig.ini"  # File to append to folder
+ini_location = os_check()  # Folder Location
+key = "tu82BZQAp9Zdhe=#EbwYGRPUCmveQ^D$cE$8u#mKZv5yUE%d2r5A*!v5HchE?vxdq&thDQHbsRmnHNEMj5kAWDsV^a3qD3?_B"
+
 parser = configcheck()
 dial = False
 
 while dial is False:
     dial = formatdial(prompt())
-    print "Dialing "+dial+"....."
-    dialNumbers(dial)
+
+dialNumbers(dial)
