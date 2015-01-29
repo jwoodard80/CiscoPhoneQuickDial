@@ -10,5 +10,5 @@ setup(
     license='',
     author='Jonathan Woodard',
     author_email='jonathan@jlwoodard.com',
-    description='This allows quick dialing to a Cisco IP Phone'
+    description='This allows quick dialing to a Cisco IP Phone', requires=['requests']
 )
